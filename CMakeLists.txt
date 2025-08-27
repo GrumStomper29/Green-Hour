@@ -1,27 +1,16 @@
-cmake_minimum_required(VERSION 4.1.0)
+cmake_minimum_required(VERSION 3.28.0)
 
-include(FetchContent)
+project(Green_Hour LANGUAGES CXX)
 
-project(Green_Hour)
+add_subdirectory(third_party)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(SOURCES src/main.cpp third_party/vma/vk_mem_alloc.h)
+set(SOURCES src/main.cpp)
 add_executable(Green_Hour ${SOURCES})
 
-target_include_directories(Green_Hour PRIVATE third_party)
+# not needed, unless you are planning to manually pull stuff like stb_image.h
+#target_include_directories(Green_Hour PRIVATE third_party)
 
-
-FetchContent_Declare(
-	SDL 
-	GIT_REPOSITORY https://github.com/libsdl-org/SDL
-	GIT_TAG main)
-FetchContent_MakeAvailable(SDL)
-target_link_libraries(Green_Hour PRIVATE SDL3::SDL3)
-
-FetchContent_Declare(
-	Daxa
-	GIT_REPOSITORY https://github.com/Ipotrick/Daxa
-	GIT_TAG master)
-FetchContent_MakeAvailable(Daxa)
+target_link_libraries(Green_Hour PRIVATE SDL3::SDL3 VulkanMemoryAllocator daxa Vulkan-Headers)
