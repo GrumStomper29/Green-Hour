@@ -1,7 +1,12 @@
-#include "SDL3/SDL.h"
 
-//#include "vma/vk_mem_alloc.h"
+#include <SDL3/SDL.h>
 
+// just to show that everything is working
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
+#include <vulkan/vulkan.h>
+#include <daxa/daxa.hpp>
 #include <iostream>
 
 int main()
