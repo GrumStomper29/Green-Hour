@@ -13,4 +13,9 @@ add_executable(Green_Hour ${SOURCES})
 # not needed, unless you are planning to manually pull stuff like stb_image.h
 #target_include_directories(Green_Hour PRIVATE third_party)
 
-target_link_libraries(Green_Hour PRIVATE SDL3::SDL3 VulkanMemoryAllocator daxa Vulkan-Headers)
+target_link_libraries(Green_Hour PRIVATE
+	SDL3::SDL3 
+	VulkanMemoryAllocator 
+	daxa 
+	Vulkan-Headers
+	EnTT)
