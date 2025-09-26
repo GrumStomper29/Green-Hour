@@ -35,10 +35,6 @@ void main()
     packed &= ~0x03030303;
 
     color = unpackUnorm4x8(packed);
-
-    // Debug printf is not necessary, we just use it here to show how it can be used.
-    // To be able to see the debug printf output, you need to open Vulkan Configurator and enable it there.
-    debugPrintfEXT("test\n");
 }
 
 #endif

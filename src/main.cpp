@@ -16,12 +16,30 @@
 #include <daxa/utils/pipeline_manager.hpp>
 #include <daxa/utils/task_graph.hpp>
 
+#include <glm/glm.hpp>
+
 #include <array>
 #include <iostream>
 #include <memory>
 #include <span>
 
+#include <unordered_map>
+#include <string>
+
 #include "windows.h"
+
+struct Transform
+{
+	glm::vec3 position{};
+	glm::vec3 rotation{};
+	glm::vec3 scale   {};
+};
+
+struct Scene
+{
+	entt::registry registry{};
+	std::unordered_map<std::string, entt::entity> entities{};
+};
 
 void uploadVertexDataTask(daxa::TaskGraph& tg, daxa::TaskBufferView vertices)
 {
@@ -175,17 +193,11 @@ int main()
 	loopTaskGraph.present({});
 	loopTaskGraph.complete({});
 
-	entt::registry registry{};
+	Scene scene{};
 
-
-	struct Transform
-	{
-		float x{};
-	};
-
-	auto entity{ registry.create() };
-
-	registry.emplace<Transform>(entity);
+	scene.entities["frog"] = scene.registry.create();
+	scene.registry.emplace<Transform>(scene.entities["frog"]);
+	
 
 
 	{
@@ -226,7 +238,7 @@ int main()
 		device.collect_garbage();
 	}
 
-	registry.destroy(entity);
+	scene.registry.destroy(entity);
 
 	device.destroy_buffer(bufferId);
 

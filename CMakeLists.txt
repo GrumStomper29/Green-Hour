@@ -18,4 +18,6 @@ target_link_libraries(Green_Hour PRIVATE
 	VulkanMemoryAllocator 
 	daxa 
 	Vulkan-Headers
-	EnTT)
+	EnTT
+	glm::glm
+)
