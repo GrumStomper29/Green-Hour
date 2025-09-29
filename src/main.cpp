@@ -4,10 +4,6 @@
 #include <SDL3/SDL.h>
 //#include <SDL3/SDL_syswm.h>
 
-// just to show that everything is working
-//#define VMA_IMPLEMENTATION
-//#include <vk_mem_alloc.h>
-
 #include <entt/entity/registry.hpp>
 
 #include <vulkan/vulkan.h>
@@ -25,8 +21,11 @@
 
 #include <unordered_map>
 #include <string>
+//#include <string_view>
 
+#ifdef _WIN32
 #include "windows.h"
+#endif
 
 struct Transform
 {
@@ -37,9 +36,80 @@ struct Transform
 
 struct Scene
 {
+	using EntityName = std::string;
+
 	entt::registry registry{};
-	std::unordered_map<std::string, entt::entity> entities{};
+
+	entt::entity createEntity(std::string name)
+	{
+		entt::entity entity{ registry.create() };
+
+		registry.emplace<EntityName>(entity, name);
+
+		return entity;
+	}
 };
+
+
+
+
+struct Renderer
+{
+	daxa::NativeWindowHandle nativeWinHandle{};
+	daxa::Instance instance                 {};
+	daxa::Device device                     {};
+	daxa::Swapchain swapchain               {};
+
+	daxa::PipelineManager pipelineManager{};
+};
+
+
+daxa::NativeWindowPlatform getNativeWindowPlatform()
+{
+#ifdef _WIN32
+
+	return daxa::NativeWindowPlatform::WIN32_API;
+
+#elifdef __linux__
+
+	const char* videoDriver{ SDL_GetCurrentVideoDriver() };
+
+	if (videoDriver == "x11")
+	{
+		return daxa::NativeWindowPlatform::XLIB_API;
+	}
+	else if (videoDriver == "wayland")
+	{
+		return daxa::NativeWindowPlatform::WAYLAND_API
+	}
+
+#endif
+
+	return daxa::NativeWindowPlatform::UNKNOWN;
+}
+
+daxa::NativeWindowHandle getNativeWindowHandle(SDL_Window* const window)
+{
+	auto windowProperties{ SDL_GetWindowProperties(window) };
+
+#ifdef _WIN32
+
+	return (HWND)SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+
+#elifdef __linux__
+
+	switch (getNativeWindowPlatform())
+	{ // todo: verify the SDL enums and are any casts required?
+	case daxa::NativeWindowPlatform::WAYLAND_API: 
+		return SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+	case daxa::NativeWindowPlatform::XLIB_API:
+	default:
+		return SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, nullptr);
+	}
+
+#endif
+}
+
 
 void uploadVertexDataTask(daxa::TaskGraph& tg, daxa::TaskBufferView vertices)
 {
@@ -110,17 +180,18 @@ int main()
 	}
 
 	SDL_WindowFlags windowFlags{ SDL_WINDOW_VULKAN };
-	auto window = SDL_CreateWindow("Green Hour", 640, 480, windowFlags);
+	SDL_Window* window = SDL_CreateWindow("Green Hour", 640, 480, windowFlags);
 
-	auto windowProperties{ SDL_GetWindowProperties(window) };
-	
-	daxa::NativeWindowHandle nativeWinHandle = (HWND)SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+	//auto windowProperties{ SDL_GetWindowProperties(window) };
 
-	daxa::Instance instance{ daxa::create_instance({}) };
-	daxa::Device   device  { instance.create_device_2(instance.choose_device({}, {})) };
+	Renderer renderer{};
+	//renderer.nativeWinHandle = (HWND)SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+	renderer.nativeWinHandle = getNativeWindowHandle(window);
+	renderer.instance = daxa::create_instance({});
+	renderer.device = renderer.instance.create_device_2(renderer.instance.choose_device({}, {}));
 
-	daxa::Swapchain swapchain{ device.create_swapchain({
-		.native_window{ nativeWinHandle },
+	renderer.swapchain = renderer.device.create_swapchain({
+		.native_window{ renderer.nativeWinHandle },
 		.native_window_platform{ daxa::NativeWindowPlatform::WIN32_API },
 		.surface_format_selector{ [](daxa::Format format)
 		{
@@ -133,10 +204,10 @@ int main()
 		.present_mode{ daxa::PresentMode::MAILBOX },
 		.image_usage{ daxa::ImageUsageFlagBits::TRANSFER_DST },
 		.name{ "swapchain" },
-	}) };
-	
-	auto pipelineManager = daxa::PipelineManager({
-		.device = device,
+	});
+
+	renderer.pipelineManager = daxa::PipelineManager({
+		.device = renderer.device,
 		.root_paths = {
 			DAXA_SHADER_INCLUDE_DIR,
 			"./../src/shaders",
@@ -148,10 +219,10 @@ int main()
 
 	std::shared_ptr<daxa::RasterPipeline> pipeline{};
 	{
-		auto result{ pipelineManager.add_raster_pipeline2({
+		auto result{ renderer.pipelineManager.add_raster_pipeline2({
 				.vertex_shader_info{ daxa::ShaderCompileInfo2{.source{ daxa::ShaderFile{ "main.glsl" } } } },
 				.fragment_shader_info{ daxa::ShaderCompileInfo2{.source{ daxa::ShaderFile{ "main.glsl" } } } },
-				.color_attachments{ { .format{ swapchain.get_format() } } },
+				.color_attachments{ {.format{ renderer.swapchain.get_format() } } },
 				.raster{},
 				.push_constant_size{ sizeof(PushConstant) },
 				.name{ "my pipeline" },
@@ -166,21 +237,21 @@ int main()
 		pipeline = result.value();
 	}
 
-	auto bufferId{ device.create_buffer({
+	auto bufferId{ renderer.device.create_buffer({
 		.size{ 3 * sizeof(Vertex) },
 		.name{ "my vertex data" },
 		}) };
 
-	auto taskSwapchainImage{ daxa::TaskImage{ { .swapchain_image{ true }, .name{ "swapchain image" } } } };
+	auto taskSwapchainImage{ daxa::TaskImage{ {.swapchain_image{ true }, .name{ "swapchain image" } } } };
 
 	daxa::TaskBuffer taskVertexBuffer({
 		.initial_buffers{.buffers{ std::span{ &bufferId, 1 } } },
 		.name{ "task vertex buffer" },
-	});
+		});
 
 	auto loopTaskGraph{ daxa::TaskGraph({
-		.device{ device },
-		.swapchain{ swapchain },
+		.device{ renderer.device },
+		.swapchain{ renderer.swapchain },
 		.name{ "loop" },
 	}) };
 
@@ -194,17 +265,13 @@ int main()
 	loopTaskGraph.complete({});
 
 	Scene scene{};
-
-	scene.entities["frog"] = scene.registry.create();
-	scene.registry.emplace<Transform>(scene.entities["frog"]);
-	
-
+	scene.createEntity("Frog");
 
 	{
-		daxa::TaskGraph uploadTaskGraph{ {.device{ device }, .name{ "upload" } } };
+		daxa::TaskGraph uploadTaskGraph{ {.device{ renderer.device }, .name{ "upload" } } };
 
 		uploadTaskGraph.use_persistent_buffer(taskVertexBuffer);
-		
+
 		uploadVertexDataTask(uploadTaskGraph, taskVertexBuffer);
 
 		uploadTaskGraph.submit({});
@@ -225,25 +292,23 @@ int main()
 			}
 		}
 
-		auto swapchainImage{ swapchain.acquire_next_image() };
+		auto swapchainImage{ renderer.swapchain.acquire_next_image() };
 		if (swapchainImage.is_empty())
 		{
 			continue;
 		}
-		
+
 		taskSwapchainImage.set_images({ .images{ std::span{ &swapchainImage, 1 } } });
 
 		loopTaskGraph.execute({});
-		
-		device.collect_garbage();
+
+		renderer.device.collect_garbage();
 	}
 
-	scene.registry.destroy(entity);
+	renderer.device.destroy_buffer(bufferId);
 
-	device.destroy_buffer(bufferId);
-
-	device.wait_idle();
-	device.collect_garbage();
+	renderer.device.wait_idle();
+	renderer.device.collect_garbage();
 
 	SDL_DestroyWindow(window);
 
